@@ -1,6 +1,6 @@
 .PHONY: build
 build:
-	go build -o gpoker ./...
+	go build -o gpoker ./cmd/gpoker
 
 .PHONY: test
 test:
