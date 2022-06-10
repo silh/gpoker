@@ -4,4 +4,5 @@ build:
 
 .PHONY: test
 test:
-	go test ./... -race
+	@go test ./... -race -coverpkg=./cmd/...,./pkg/... -cover -coverprofile coverage.out
+	@go tool cover -func coverage.out
