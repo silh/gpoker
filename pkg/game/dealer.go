@@ -9,24 +9,22 @@ import (
 	"sync"
 )
 
-type Poker struct {
-	ID      uint64            `json:"id"`
-	Name    string            `json:"name"`
-	Players map[uint64]Player `json:"players"`
-}
+type GameID uint64 // TODO same as the above
+type Vote uint64   // TODO well that should probably be an interface? Or some enum
 
-type Player struct {
-	ID   uint64 `json:"id"`
-	Name string `json:"name"`
-	Vote uint64 `json:"vote"`
+// Poker tracks game info. The structure is not ideal and should be reconsidered.
+type Poker struct {
+	ID      GameID              `json:"id"`
+	Name    string              `json:"name"`
+	Players map[PlayerID]Player `json:"players"`
+	Votes   map[PlayerID]Vote   `json:"votes"`
 }
 
 // Dealer controls all games.
 type Dealer struct {
-	counter uint64
-	games   map[uint64]Poker
-	lock    sync.RWMutex // protects counter and games. This can be changed in the future to work with channels
-
+	nextGameID GameID
+	games      map[GameID]Poker
+	lock       sync.RWMutex // protects nextGameID and games. This can be changed in the future to work with channels
 }
 
 func (d *Dealer) CreateGame(c *gin.Context) {
@@ -38,11 +36,11 @@ func (d *Dealer) CreateGame(c *gin.Context) {
 		return
 	}
 	poker := Poker{
-		ID:      d.counter,
-		Players: map[uint64]Player{gameReq.Player.ID: gameReq.Player},
+		ID:      d.nextGameID,
+		Players: map[PlayerID]Player{gameReq.Player.ID: gameReq.Player},
 		Name:    gameReq.GameName,
 	}
-	d.counter++
+	d.nextGameID++
 	d.games[poker.ID] = poker
 	c.JSON(http.StatusCreated, &poker)
 }
@@ -55,7 +53,7 @@ func (d *Dealer) GetGame(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	poker, ok := d.games[id]
+	poker, ok := d.games[GameID(id)]
 	if !ok {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
@@ -81,7 +79,7 @@ func (d *Dealer) JoinGame(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	game, ok := d.games[id]
+	game, ok := d.games[GameID(id)]
 	if !ok {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
@@ -103,7 +101,7 @@ func (d *Dealer) AcceptVote(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	game, ok := d.games[gameId]
+	game, ok := d.games[GameID(gameId)]
 	if !ok {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
@@ -114,13 +112,12 @@ func (d *Dealer) AcceptVote(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	player, ok := game.Players[playerId]
+	player, ok := game.Players[PlayerID(playerId)]
 	if !ok {
 		c.AbortWithStatus(http.StatusBadRequest) // player not part of the game
 		return
 	}
-	player.Vote = voteReq.Vote
-	game.Players[playerId] = player
+	game.Votes[player.ID] = voteReq.Vote
 	c.JSON(http.StatusOK, game)
 }
 

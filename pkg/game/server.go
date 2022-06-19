@@ -21,10 +21,12 @@ func NewServer() *Server {
 	app := gin.Default()
 	app.Use(cors.Default()) // CORS enabler for dev
 	dealer := Dealer{
-		counter: 0,
-		games:   make(map[uint64]Poker),
+		nextGameID: 0,
+		games:      make(map[GameID]Poker),
 	}
 	app.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
+	app.POST("/signup")
+
 	app.POST("/api/games", dealer.CreateGame)
 	app.GET("/api/games", dealer.ListGameNames)
 	app.GET("/api/games/:gameId", dealer.GetGame)

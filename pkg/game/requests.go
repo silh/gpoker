@@ -13,5 +13,5 @@ type JoinPokerRequest struct {
 
 // VoteRequest for player's vote.
 type VoteRequest struct {
-	Vote uint64 `json:"AcceptVote"`
+	Vote Vote `json:"AcceptVote"`
 }

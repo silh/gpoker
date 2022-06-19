@@ -1,4 +1,4 @@
-package main
+package main_test
 
 import (
 	"bytes"
@@ -18,21 +18,21 @@ var createGameReq = game.CreatePokerRequest{Player: game.Player{
 }}
 
 func TestCreate(t *testing.T) {
-	server := game.NewStartedServer()
-	defer server.Stop(context.Background())
+	srv := game.NewStartedServer()
+	defer srv.Stop(context.Background())
 	waitForServer(t)
 
 	createDefaultGame(t)
 }
 
 func TestCreateAndGetAGame(t *testing.T) {
-	server := game.NewStartedServer()
-	defer server.Stop(context.Background())
+	srv := game.NewStartedServer()
+	defer srv.Stop(context.Background())
 	waitForServer(t)
 	createDefaultGame(t)
 
 	var poker game.Poker
-	resp, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:8080/api/games/%d", poker.ID))
+	resp, err := http.DefaultClient.Get(fmt.Sprintf(fullPath("/api/games/%d"), poker.ID))
 	require.NoError(t, err)
 	poker = game.Poker{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&poker))
@@ -88,12 +88,13 @@ func TestListGames(t *testing.T) {
 				createGame(t, req)
 			}
 
-			resp, err := http.Get("http://localhost:8080/api/games")
+			resp, err := http.Get(fullPath("/api/games"))
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, resp.StatusCode)
 			var resGameNames []string
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&resGameNames))
 			require.Equal(t, len(test.createGameRequests), len(resGameNames))
+
 			expectedGameNames := make([]string, 0, len(test.createGameRequests))
 			for _, g := range test.createGameRequests {
 				expectedGameNames = append(expectedGameNames, g.GameName)
@@ -106,7 +107,7 @@ func TestListGames(t *testing.T) {
 func createGame(t *testing.T, req game.CreatePokerRequest) {
 	var buffer bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buffer).Encode(&req))
-	resp, err := http.DefaultClient.Post("http://localhost:8080/api/games", "application/json", &buffer)
+	resp, err := http.DefaultClient.Post(fullPath("/api/games"), "application/json", &buffer)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var poker game.Poker
@@ -127,11 +128,15 @@ func waitForServer(t *testing.T) {
 		case <-timeout:
 			t.Fatalf("Server didn't start in time, last error %s", err)
 		default:
-			resp, err = http.Get("http://localhost:8080/health") // TODO fix hardcoded
+			resp, err = http.Get(fullPath("/health")) // TODO fix hardcoded
 			if err == nil && resp.StatusCode == http.StatusOK {
 				done = true
 			}
 			time.Sleep(1 * time.Millisecond)
 		}
 	}
+}
+
+func fullPath(apiPath string) string {
+	return "http://localhost:8080" + apiPath
 }
