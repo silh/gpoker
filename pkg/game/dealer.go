@@ -4,27 +4,28 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 )
 
 type Poker struct {
 	ID      uint64            `json:"id"`
+	Name    string            `json:"name"`
 	Players map[uint64]Player `json:"players"`
 }
 
 type Player struct {
 	ID   uint64 `json:"id"`
 	Name string `json:"name"`
-	Vote uint64 `json:"AcceptVote"`
+	Vote uint64 `json:"vote"`
 }
 
 // Dealer controls all games.
 type Dealer struct {
-	// FIXME un-public those
-	Counter uint64
-	Games   map[uint64]Poker
-	lock    sync.RWMutex // protects counter and Games. This can be changed in the future to work with channels
+	counter uint64
+	games   map[uint64]Poker
+	lock    sync.RWMutex // protects counter and games. This can be changed in the future to work with channels
 
 }
 
@@ -37,11 +38,12 @@ func (d *Dealer) CreateGame(c *gin.Context) {
 		return
 	}
 	poker := Poker{
-		ID:      d.Counter,
+		ID:      d.counter,
 		Players: map[uint64]Player{gameReq.Player.ID: gameReq.Player},
+		Name:    gameReq.GameName,
 	}
-	d.Counter++
-	d.Games[poker.ID] = poker
+	d.counter++
+	d.games[poker.ID] = poker
 	c.JSON(http.StatusCreated, &poker)
 }
 
@@ -53,12 +55,17 @@ func (d *Dealer) GetGame(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	poker, ok := d.Games[id]
+	poker, ok := d.games[id]
 	if !ok {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	c.JSON(http.StatusOK, &poker)
+}
+
+func (d *Dealer) ListGameNames(c *gin.Context) {
+	sortedGames := d.sortedGamesList()
+	c.JSON(http.StatusOK, sortedGames)
 }
 
 func (d *Dealer) JoinGame(c *gin.Context) {
@@ -74,7 +81,7 @@ func (d *Dealer) JoinGame(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	game, ok := d.Games[id]
+	game, ok := d.games[id]
 	if !ok {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
@@ -96,7 +103,7 @@ func (d *Dealer) AcceptVote(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	game, ok := d.Games[gameId]
+	game, ok := d.games[gameId]
 	if !ok {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
@@ -122,4 +129,16 @@ func ParamUint64(c *gin.Context, name string) (uint64, bool) {
 	idStr := c.Param(name)
 	id, err := strconv.ParseUint(idStr, 10, 0)
 	return id, err == nil
+}
+
+func (d *Dealer) sortedGamesList() []string {
+	// TODO this can be quite slow if we have a lot of games.
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+	gamesList := make([]string, 0, len(d.games))
+	for _, v := range d.games {
+		gamesList = append(gamesList, v.Name)
+	}
+	sort.Strings(gamesList)
+	return gamesList
 }

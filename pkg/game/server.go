@@ -2,27 +2,34 @@ package game
 
 import (
 	"context"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+	"sync"
 )
 
 // Server is a main game server
 type Server struct {
 	srv *http.Server
+
+	startOnce sync.Once
 }
 
+// NewServer creates a new Server.
 func NewServer() *Server {
 	app := gin.Default()
+	app.Use(cors.Default()) // CORS enabler for dev
 	dealer := Dealer{
-		Counter: 0,
-		Games:   make(map[uint64]Poker),
+		counter: 0,
+		games:   make(map[uint64]Poker),
 	}
 	app.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
-	app.POST("/api/game", dealer.CreateGame)
-	app.GET("/api/game/:gameId", dealer.GetGame)
-	app.PUT("/api/game/:gameId/join", dealer.JoinGame)
-	app.POST("/api/game/:gameId/player/:playerId/vote", dealer.AcceptVote)
+	app.POST("/api/games", dealer.CreateGame)
+	app.GET("/api/games", dealer.ListGameNames)
+	app.GET("/api/games/:gameId", dealer.GetGame)
+	app.PUT("/api/games/:gameId/join", dealer.JoinGame)
+	app.POST("/api/games/:gameId/players/:playerId/vote", dealer.AcceptVote)
 	return &Server{
 		srv: &http.Server{
 			Addr:    ":8080", // FIXME don't hardcode that
@@ -31,12 +38,21 @@ func NewServer() *Server {
 	}
 }
 
+// NewStartedServer creates a new Server and starts it.
+func NewStartedServer() *Server {
+	srv := NewServer()
+	srv.Start()
+	return srv
+}
+
 func (s *Server) Start() {
-	go func() {
-		if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error = %s", err)
-		}
-	}()
+	s.startOnce.Do(func() {
+		go func() {
+			if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("Server error = %s", err)
+			}
+		}()
+	})
 }
 
 func (s *Server) Stop(ctx context.Context) error {

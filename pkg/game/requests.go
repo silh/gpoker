@@ -2,7 +2,8 @@ package game
 
 // CreatePokerRequest to start a game.
 type CreatePokerRequest struct {
-	Player Player `json:"player"`
+	GameName string `json:"gameName"`
+	Player   Player `json:"creator"`
 }
 
 // JoinPokerRequest to join a game.
