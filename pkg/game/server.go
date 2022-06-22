@@ -11,7 +11,9 @@ import (
 
 // Server is a main game server
 type Server struct {
-	srv *http.Server
+	srv            *http.Server
+	dealer         *Dealer
+	playerRegistry *PlayerRegistry
 
 	startOnce sync.Once
 }
@@ -24,20 +26,25 @@ func NewServer() *Server {
 		nextGameID: 0,
 		games:      make(map[GameID]Poker),
 	}
-	app.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
-	app.POST("/signup")
-
-	app.POST("/api/games", dealer.CreateGame)
-	app.GET("/api/games", dealer.ListGameNames)
-	app.GET("/api/games/:gameId", dealer.GetGame)
-	app.PUT("/api/games/:gameId/join", dealer.JoinGame)
-	app.POST("/api/games/:gameId/players/:playerId/vote", dealer.AcceptVote)
-	return &Server{
+	registry := NewPlayerRegistry()
+	srv := &Server{
 		srv: &http.Server{
 			Addr:    ":8080", // FIXME don't hardcode that
 			Handler: app,
 		},
+		dealer:         &dealer,
+		playerRegistry: registry,
 	}
+
+	app.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
+	app.POST("/signup", srv.signup)
+
+	app.POST("/api/games", srv.createGame)
+	app.GET("/api/games", dealer.ListGameNames)
+	app.GET("/api/games/:gameId", dealer.GetGame)
+	app.PUT("/api/games/:gameId/join", dealer.JoinGame)
+	app.POST("/api/games/:gameId/players/:playerId/vote", dealer.AcceptVote)
+	return srv
 }
 
 // NewStartedServer creates a new Server and starts it.
@@ -59,4 +66,33 @@ func (s *Server) Start() {
 
 func (s *Server) Stop(ctx context.Context) error {
 	return s.srv.Shutdown(ctx)
+}
+
+func (s *Server) signup(c *gin.Context) {
+	var req RegisterUserRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	player := s.playerRegistry.Register(req.Name)
+	c.JSON(http.StatusOK, &player)
+}
+
+func (s *Server) createGame(c *gin.Context) {
+	var req CreatePokerRequest
+	if err := c.BindJSON(&req); err != nil {
+		_ = c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	player, ok := s.playerRegistry.Get(req.CreatorID)
+	if !ok {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	game, err := s.dealer.CreateGame(req.GameName, player)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusCreated, &game)
 }

@@ -1,4 +1,4 @@
-package main_test
+package game_test
 
 import (
 	"bytes"
@@ -6,30 +6,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/require"
+	"gpoker/gen"
 	"gpoker/pkg/game"
 	"net/http"
 	"testing"
 	"time"
 )
 
-var createGameReq = game.CreatePokerRequest{Player: game.Player{
-	ID:   1,
-	Name: "Sony",
-}}
-
 func TestCreate(t *testing.T) {
 	srv := game.NewStartedServer()
 	defer srv.Stop(context.Background())
 	waitForServer(t)
 
-	createDefaultGame(t)
+	createDefaultGame(t, createUser(t))
 }
 
 func TestCreateAndGetAGame(t *testing.T) {
 	srv := game.NewStartedServer()
 	defer srv.Stop(context.Background())
 	waitForServer(t)
-	createDefaultGame(t)
+	createDefaultGame(t, createUser(t))
 
 	var poker game.Poker
 	resp, err := http.DefaultClient.Get(fmt.Sprintf(fullPath("/api/games/%d"), poker.ID))
@@ -40,43 +36,35 @@ func TestCreateAndGetAGame(t *testing.T) {
 
 func TestListGames(t *testing.T) {
 	tests := []struct {
-		name               string
-		createGameRequests []game.CreatePokerRequest
+		name                   string
+		generateCreatorsIDs    func(t *testing.T) []game.PlayerID
+		numberOfGamesPerPlayer int
 	}{
 		{
-			name:               "zero games",
-			createGameRequests: nil,
+			name:                   "zero games",
+			generateCreatorsIDs:    func(t *testing.T) []game.PlayerID { return nil },
+			numberOfGamesPerPlayer: 0,
 		},
 		{
 			name: "1 game",
-			createGameRequests: []game.CreatePokerRequest{
-				{
-					GameName: "one",
-					Player: game.Player{
-						ID:   1,
-						Name: "Alan",
-					},
-				},
+			generateCreatorsIDs: func(t *testing.T) []game.PlayerID {
+				return []game.PlayerID{createUser(t).ID}
 			},
+			numberOfGamesPerPlayer: 1,
 		},
 		{
-			name: "2 games",
-			createGameRequests: []game.CreatePokerRequest{
-				{
-					GameName: "one",
-					Player: game.Player{
-						ID:   1,
-						Name: "Alan",
-					},
-				},
-				{
-					GameName: "two",
-					Player: game.Player{
-						ID:   2,
-						Name: "Fibo",
-					},
-				},
+			name: "2 games 2 creators",
+			generateCreatorsIDs: func(t *testing.T) []game.PlayerID {
+				return []game.PlayerID{createUser(t).ID, createUser(t).ID}
 			},
+			numberOfGamesPerPlayer: 1,
+		},
+		{
+			name: "2 games 1 creator",
+			generateCreatorsIDs: func(t *testing.T) []game.PlayerID {
+				return []game.PlayerID{createUser(t).ID}
+			},
+			numberOfGamesPerPlayer: 2,
 		},
 	}
 	for _, test := range tests {
@@ -84,8 +72,16 @@ func TestListGames(t *testing.T) {
 			server := game.NewStartedServer()
 			defer server.Stop(context.Background())
 
-			for _, req := range test.createGameRequests {
-				createGame(t, req)
+			expectedGameNames := make([]string, 0, test.numberOfGamesPerPlayer)
+			for _, creatorID := range test.generateCreatorsIDs(t) {
+				for i := 0; i < test.numberOfGamesPerPlayer; i++ {
+					req := game.CreatePokerRequest{
+						GameName:  gen.RandLowercaseString(),
+						CreatorID: creatorID,
+					}
+					expectedGameNames = append(expectedGameNames, req.GameName)
+					createGame(t, req)
+				}
 			}
 
 			resp, err := http.Get(fullPath("/api/games"))
@@ -93,15 +89,25 @@ func TestListGames(t *testing.T) {
 			require.Equal(t, http.StatusOK, resp.StatusCode)
 			var resGameNames []string
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&resGameNames))
-			require.Equal(t, len(test.createGameRequests), len(resGameNames))
+			require.Equal(t, len(expectedGameNames), len(resGameNames))
 
-			expectedGameNames := make([]string, 0, len(test.createGameRequests))
-			for _, g := range test.createGameRequests {
-				expectedGameNames = append(expectedGameNames, g.GameName)
-			}
 			require.ElementsMatch(t, expectedGameNames, resGameNames)
 		})
 	}
+}
+
+func createUser(t *testing.T) game.Player {
+	req := game.RegisterUserRequest{Name: gen.RandLowercaseString()}
+	var buffer bytes.Buffer
+	require.NoError(t, json.NewEncoder(&buffer).Encode(&req))
+	resp, err := http.Post(fullPath("/signup"), "application/json", &buffer)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	var player game.Player
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&player))
+	require.NotZero(t, player)
+	require.Equal(t, req.Name, player.Name)
+	return player
 }
 
 func createGame(t *testing.T, req game.CreatePokerRequest) {
@@ -115,7 +121,11 @@ func createGame(t *testing.T, req game.CreatePokerRequest) {
 	require.NoError(t, err)
 }
 
-func createDefaultGame(t *testing.T) {
+func createDefaultGame(t *testing.T, player game.Player) {
+	var createGameReq = game.CreatePokerRequest{
+		GameName:  gen.RandLowercaseString(),
+		CreatorID: player.ID,
+	}
 	createGame(t, createGameReq)
 }
 

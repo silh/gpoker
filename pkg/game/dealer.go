@@ -27,22 +27,17 @@ type Dealer struct {
 	lock       sync.RWMutex // protects nextGameID and games. This can be changed in the future to work with channels
 }
 
-func (d *Dealer) CreateGame(c *gin.Context) {
+func (d *Dealer) CreateGame(name string, creator Player) (*Poker, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	var gameReq CreatePokerRequest
-	if err := c.Bind(&gameReq); err != nil {
-		_ = c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
 	poker := Poker{
 		ID:      d.nextGameID,
-		Players: map[PlayerID]Player{gameReq.Player.ID: gameReq.Player},
-		Name:    gameReq.GameName,
+		Players: map[PlayerID]Player{creator.ID: creator},
+		Name:    name,
 	}
 	d.nextGameID++
 	d.games[poker.ID] = poker
-	c.JSON(http.StatusCreated, &poker)
+	return &poker, nil
 }
 
 func (d *Dealer) GetGame(c *gin.Context) {
