@@ -2,14 +2,12 @@ package game
 
 import (
 	"errors"
-	"github.com/gin-gonic/gin"
-	"log"
-	"net/http"
 	"sort"
 	"sync"
 )
 
 var ErrGameNotFound = errors.New("game not found")
+var ErrPlayerNotInGame = errors.New("player not in game")
 
 type GameID uint64 // TODO same as the above
 type Vote uint64   // TODO well that should probably be an interface? Or some enum
@@ -29,7 +27,7 @@ type Dealer struct {
 	lock       sync.RWMutex // protects nextGameID and games. This can be changed in the future to work with channels
 }
 
-func (d *Dealer) CreateGame(name string, creator Player) (*Poker, error) {
+func (d *Dealer) CreateGame(name string, creator Player) (*Poker, error) { // TODO not sure if this should return a pointer
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	poker := Poker{
@@ -60,58 +58,29 @@ func (d *Dealer) GetGame(id GameID) (Poker, bool) {
 	return poker, ok
 }
 
-func (d *Dealer) JoinGame(gameID GameID, joinReq JoinPokerRequest) error {
+// TODO we obviously don't handle the case where player is deleted while they are in a game
+func (d *Dealer) JoinGame(gameID GameID, player Player) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	game, ok := d.games[gameID]
 	if !ok {
 		return ErrGameNotFound
 	}
-	game.Players[joinReq.Player.ID] = joinReq.Player
+	game.Players[player.ID] = player
 	return nil
 }
 
-func (d *Dealer) AcceptVote(c *gin.Context) {
-	d.lock.Lock()
+func (d *Dealer) Vote(gameId GameID, voteReq VoteRequest) error {
+	d.lock.Lock() // TODO full lock here just to vote... That's not scalable.
 	defer d.lock.Unlock()
-	gameId, ok := ParamUint64(c, "gameId")
+	game, ok := d.games[gameId]
 	if !ok {
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
+		return ErrGameNotFound
 	}
-	playerId, ok := ParamUint64(c, "playerId")
+	player, ok := game.Players[voteReq.PlayerID]
 	if !ok {
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
-	game, ok := d.games[GameID(gameId)]
-	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
-		return
-	}
-	var voteReq VoteRequest
-	if err := c.BindJSON(&voteReq); err != nil {
-		log.Printf("Failed to parse AcceptVote request = %s", err)
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
-	player, ok := game.Players[PlayerID(playerId)]
-	if !ok {
-		c.AbortWithStatus(http.StatusBadRequest) // player not part of the game
-		return
+		return ErrPlayerNotInGame
 	}
 	game.Votes[player.ID] = voteReq.Vote
-	c.JSON(http.StatusOK, game)
-}
-
-func (d *Dealer) sortedGamesList() []string {
-	// TODO this can be quite slow if we have a lot of games.
-	d.lock.RLock()
-	defer d.lock.RUnlock()
-	gamesList := make([]string, 0, len(d.games))
-	for _, v := range d.games {
-		gamesList = append(gamesList, v.Name)
-	}
-	sort.Strings(gamesList)
-	return gamesList
+	return nil
 }

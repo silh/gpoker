@@ -8,12 +8,13 @@ type CreatePokerRequest struct {
 
 // JoinPokerRequest to join a game.
 type JoinPokerRequest struct {
-	Player Player `json:"player"`
+	PlayerID PlayerID `json:"playerID"`
 }
 
 // VoteRequest for player's vote.
 type VoteRequest struct {
-	Vote Vote `json:"AcceptVote"`
+	PlayerID PlayerID `json:"playerID"`
+	Vote     Vote     `json:"Vote"`
 }
 
 // RegisterUserRequest to add new user. We don't need passwords for now.

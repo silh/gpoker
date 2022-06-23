@@ -44,7 +44,7 @@ func NewServer() *Server {
 	app.GET("/api/games", srv.listGameNames)
 	app.GET("/api/games/:gameId", srv.getGame)
 	app.PUT("/api/games/:gameId/join", srv.joinGame)
-	app.POST("/api/games/:gameId/players/:playerId/vote", dealer.AcceptVote)
+	app.POST("/api/games/:gameId/vote", srv.vote) // should it rather be put? patch?
 	return srv
 }
 
@@ -129,17 +129,41 @@ func (s *Server) joinGame(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	err := s.dealer.JoinGame(GameID(id), joinReq)
-	if err == nil {
-		c.Status(http.StatusOK)
+	player, ok := s.playerRegistry.Get(joinReq.PlayerID)
+	if !ok {
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
+
+	err := s.dealer.JoinGame(GameID(id), player)
+
 	switch err {
+	case nil:
+		c.Status(http.StatusOK)
 	case ErrGameNotFound:
 		c.AbortWithStatus(http.StatusBadRequest)
 	default:
 		c.String(http.StatusInternalServerError, err.Error())
 	}
+}
+
+func (s *Server) vote(c *gin.Context) {
+	gameId, ok := ParamUint64(c, "gameId")
+	if !ok {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	var voteReq VoteRequest
+	if err := c.BindJSON(&voteReq); err != nil {
+		log.Printf("Failed to parse Vote request = %s", err)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	err := s.dealer.Vote(GameID(gameId), voteReq)
+	switch err {
+
+	}
+	c.Status(http.StatusOK)
 }
 
 // ParamUint64 extracts parameter from gin.Context that is expected to be uint64.
