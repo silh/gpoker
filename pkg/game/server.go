@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 )
 
@@ -40,9 +41,9 @@ func NewServer() *Server {
 	app.POST("/signup", srv.signup)
 
 	app.POST("/api/games", srv.createGame)
-	app.GET("/api/games", dealer.ListGameNames)
-	app.GET("/api/games/:gameId", dealer.GetGame)
-	app.PUT("/api/games/:gameId/join", dealer.JoinGame)
+	app.GET("/api/games", srv.listGameNames)
+	app.GET("/api/games/:gameId", srv.getGame)
+	app.PUT("/api/games/:gameId/join", srv.joinGame)
 	app.POST("/api/games/:gameId/players/:playerId/vote", dealer.AcceptVote)
 	return srv
 }
@@ -95,4 +96,55 @@ func (s *Server) createGame(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, &game)
+}
+
+// TODO probably we should return names and ids so that the user can decide to join one.
+func (s *Server) listGameNames(c *gin.Context) {
+	names := s.dealer.ListGameNames()
+	c.JSON(http.StatusOK, &names)
+}
+
+func (s *Server) getGame(c *gin.Context) {
+	id, ok := ParamUint64(c, "gameId")
+	if !ok {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	poker, ok := s.dealer.GetGame(GameID(id))
+	if !ok {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.JSON(http.StatusOK, &poker)
+}
+
+func (s *Server) joinGame(c *gin.Context) {
+	var joinReq JoinPokerRequest
+	if err := c.BindJSON(&joinReq); err != nil {
+		_ = c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	id, ok := ParamUint64(c, "gameId")
+	if !ok {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	err := s.dealer.JoinGame(GameID(id), joinReq)
+	if err == nil {
+		c.Status(http.StatusOK)
+		return
+	}
+	switch err {
+	case ErrGameNotFound:
+		c.AbortWithStatus(http.StatusBadRequest)
+	default:
+		c.String(http.StatusInternalServerError, err.Error())
+	}
+}
+
+// ParamUint64 extracts parameter from gin.Context that is expected to be uint64.
+func ParamUint64(c *gin.Context, name string) (uint64, bool) {
+	idStr := c.Param(name)
+	id, err := strconv.ParseUint(idStr, 10, 0)
+	return id, err == nil
 }

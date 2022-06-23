@@ -1,13 +1,15 @@
 package game
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"sort"
-	"strconv"
 	"sync"
 )
+
+var ErrGameNotFound = errors.New("game not found")
 
 type GameID uint64 // TODO same as the above
 type Vote uint64   // TODO well that should probably be an interface? Or some enum
@@ -40,47 +42,33 @@ func (d *Dealer) CreateGame(name string, creator Player) (*Poker, error) {
 	return &poker, nil
 }
 
-func (d *Dealer) GetGame(c *gin.Context) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	id, ok := ParamUint64(c, "gameId")
-	if !ok {
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
+func (d *Dealer) ListGameNames() []string {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+	gamesList := make([]string, 0, len(d.games))
+	for _, v := range d.games {
+		gamesList = append(gamesList, v.Name)
 	}
-	poker, ok := d.games[GameID(id)]
-	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
-		return
-	}
-	c.JSON(http.StatusOK, &poker)
+	sort.Strings(gamesList)
+	return gamesList
 }
 
-func (d *Dealer) ListGameNames(c *gin.Context) {
-	sortedGames := d.sortedGamesList()
-	c.JSON(http.StatusOK, sortedGames)
-}
-
-func (d *Dealer) JoinGame(c *gin.Context) {
+func (d *Dealer) GetGame(id GameID) (Poker, bool) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	var joinReq JoinPokerRequest
-	if err := c.BindJSON(&joinReq); err != nil {
-		_ = c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-	id, ok := ParamUint64(c, "gameId")
+	poker, ok := d.games[id]
+	return poker, ok
+}
+
+func (d *Dealer) JoinGame(gameID GameID, joinReq JoinPokerRequest) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	game, ok := d.games[gameID]
 	if !ok {
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
-	game, ok := d.games[GameID(id)]
-	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
-		return
+		return ErrGameNotFound
 	}
 	game.Players[joinReq.Player.ID] = joinReq.Player
-	c.JSON(http.StatusOK, &game)
+	return nil
 }
 
 func (d *Dealer) AcceptVote(c *gin.Context) {
@@ -114,13 +102,6 @@ func (d *Dealer) AcceptVote(c *gin.Context) {
 	}
 	game.Votes[player.ID] = voteReq.Vote
 	c.JSON(http.StatusOK, game)
-}
-
-// ParamUint64 extracts parameter from gin.Context that is expected to be uint64.
-func ParamUint64(c *gin.Context, name string) (uint64, bool) {
-	idStr := c.Param(name)
-	id, err := strconv.ParseUint(idStr, 10, 0)
-	return id, err == nil
 }
 
 func (d *Dealer) sortedGamesList() []string {
