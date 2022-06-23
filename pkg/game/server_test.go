@@ -25,12 +25,11 @@ func TestCreateAndGetAGame(t *testing.T) {
 	srv := game.NewStartedServer()
 	defer srv.Stop(context.Background())
 	waitForServer(t)
-	createDefaultGame(t, createUser(t))
+	pokerID := createDefaultGame(t, createUser(t))
 
-	var poker game.Poker
-	resp, err := http.DefaultClient.Get(fmt.Sprintf(fullPath("/api/games/%d"), poker.ID))
+	resp, err := http.Get(fmt.Sprintf(fullPath("/api/games/%d"), pokerID))
 	require.NoError(t, err)
-	poker = game.Poker{}
+	var poker game.Poker
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&poker))
 }
 
@@ -96,6 +95,41 @@ func TestListGames(t *testing.T) {
 	}
 }
 
+func TestJoinGame(t *testing.T) {
+	srv := game.NewStartedServer()
+	defer srv.Stop(context.Background())
+	waitForServer(t)
+	creator := createUser(t)
+	gameID := createDefaultGame(t, creator)
+	joiners := []game.Player{
+		createUser(t),
+		createUser(t),
+	}
+	var buf bytes.Buffer
+	for _, player := range joiners {
+		body := game.JoinPokerRequest{PlayerID: player.ID}
+		require.NoError(t, json.NewEncoder(&buf).Encode(&body))
+		req, err := http.NewRequest(http.MethodPut, fmt.Sprintf(fullPath("/api/games/%d/join"), gameID), &buf)
+		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		buf.Reset()
+	}
+	players := make([]game.Player, 0, 1+len(joiners))
+	players = append(players, creator)
+	players = append(players, joiners...)
+
+	resp, err := http.Get(fmt.Sprintf(fullPath("/api/games/%d"), gameID))
+	require.NoError(t, err)
+	var poker game.Poker
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&poker))
+	require.Equal(t, len(players), len(poker.Players))
+	for _, player := range players {
+		require.Equal(t, player, poker.Players[player.ID])
+	}
+}
+
 func createUser(t *testing.T) game.Player {
 	req := game.RegisterUserRequest{Name: gen.RandLowercaseString()}
 	var buffer bytes.Buffer
@@ -110,23 +144,24 @@ func createUser(t *testing.T) game.Player {
 	return player
 }
 
-func createGame(t *testing.T, req game.CreatePokerRequest) {
+func createGame(t *testing.T, req game.CreatePokerRequest) game.GameID {
 	var buffer bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buffer).Encode(&req))
-	resp, err := http.DefaultClient.Post(fullPath("/api/games"), "application/json", &buffer)
+	resp, err := http.Post(fullPath("/api/games"), "application/json", &buffer)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var poker game.Poker
 	err = json.NewDecoder(resp.Body).Decode(&poker) //not entirely correct...
 	require.NoError(t, err)
+	return poker.ID
 }
 
-func createDefaultGame(t *testing.T, player game.Player) {
+func createDefaultGame(t *testing.T, player game.Player) game.GameID {
 	var createGameReq = game.CreatePokerRequest{
 		GameName:  gen.RandLowercaseString(),
 		CreatorID: player.ID,
 	}
-	createGame(t, createGameReq)
+	return createGame(t, createGameReq)
 }
 
 func waitForServer(t *testing.T) {

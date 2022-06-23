@@ -23,7 +23,7 @@ type Poker struct {
 // Dealer controls all games.
 type Dealer struct {
 	nextGameID GameID
-	games      map[GameID]Poker
+	games      map[GameID]*Poker
 	lock       sync.RWMutex // protects nextGameID and games. This can be changed in the future to work with channels
 }
 
@@ -36,7 +36,7 @@ func (d *Dealer) CreateGame(name string, creator Player) (*Poker, error) { // TO
 		Name:    name,
 	}
 	d.nextGameID++
-	d.games[poker.ID] = poker
+	d.games[poker.ID] = &poker
 	return &poker, nil
 }
 
@@ -51,7 +51,7 @@ func (d *Dealer) ListGameNames() []string {
 	return gamesList
 }
 
-func (d *Dealer) GetGame(id GameID) (Poker, bool) {
+func (d *Dealer) GetGame(id GameID) (*Poker, bool) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	poker, ok := d.games[id]

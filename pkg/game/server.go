@@ -2,6 +2,8 @@ package game
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"log"
@@ -9,6 +11,8 @@ import (
 	"strconv"
 	"sync"
 )
+
+var ErrBadGameID = errors.New("game ID is not provided or is incorrect")
 
 // Server is a main game server
 type Server struct {
@@ -25,7 +29,7 @@ func NewServer() *Server {
 	app.Use(cors.Default()) // CORS enabler for dev
 	dealer := Dealer{
 		nextGameID: 0,
-		games:      make(map[GameID]Poker),
+		games:      make(map[GameID]*Poker),
 	}
 	registry := NewPlayerRegistry()
 	srv := &Server{
@@ -107,12 +111,12 @@ func (s *Server) listGameNames(c *gin.Context) {
 func (s *Server) getGame(c *gin.Context) {
 	id, ok := ParamUint64(c, "gameId")
 	if !ok {
-		c.AbortWithStatus(http.StatusBadRequest)
+		_ = c.AbortWithError(http.StatusBadRequest, ErrBadGameID)
 		return
 	}
 	poker, ok := s.dealer.GetGame(GameID(id))
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
+		_ = c.AbortWithError(http.StatusNotFound, errGameNotFound(GameID(id)))
 		return
 	}
 	c.JSON(http.StatusOK, &poker)
@@ -124,26 +128,26 @@ func (s *Server) joinGame(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-	id, ok := ParamUint64(c, "gameId")
+	gameId, ok := ParamUint64(c, "gameId")
 	if !ok {
-		c.AbortWithStatus(http.StatusBadRequest)
+		_ = c.AbortWithError(http.StatusBadRequest, ErrBadGameID) // TODO Should it be abort?
 		return
 	}
 	player, ok := s.playerRegistry.Get(joinReq.PlayerID)
 	if !ok {
-		c.AbortWithStatus(http.StatusBadRequest)
+		_ = c.AbortWithError(http.StatusBadRequest, fmt.Errorf("player with id %d not found", joinReq.PlayerID))
 		return
 	}
 
-	err := s.dealer.JoinGame(GameID(id), player)
+	err := s.dealer.JoinGame(GameID(gameId), player)
 
 	switch err {
 	case nil:
 		c.Status(http.StatusOK)
 	case ErrGameNotFound:
-		c.AbortWithStatus(http.StatusBadRequest)
+		_ = c.AbortWithError(http.StatusBadRequest, errGameNotFound(GameID(gameId)))
 	default:
-		c.String(http.StatusInternalServerError, err.Error())
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
 	}
 }
 
@@ -155,15 +159,20 @@ func (s *Server) vote(c *gin.Context) {
 	}
 	var voteReq VoteRequest
 	if err := c.BindJSON(&voteReq); err != nil {
-		log.Printf("Failed to parse Vote request = %s", err)
-		c.AbortWithStatus(http.StatusBadRequest)
+		_ = c.AbortWithError(http.StatusBadRequest, err) // TODO remove this later
 		return
 	}
 	err := s.dealer.Vote(GameID(gameId), voteReq)
 	switch err {
-
+	case nil:
+		c.Status(http.StatusOK)
+	case ErrGameNotFound:
+		_ = c.AbortWithError(http.StatusBadRequest, errGameNotFound(GameID(gameId)))
+	case ErrPlayerNotInGame:
+		_ = c.AbortWithError(http.StatusBadRequest, fmt.Errorf("player %d not in game %d", voteReq.PlayerID, gameId))
+	default:
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
 	}
-	c.Status(http.StatusOK)
 }
 
 // ParamUint64 extracts parameter from gin.Context that is expected to be uint64.
@@ -171,4 +180,8 @@ func ParamUint64(c *gin.Context, name string) (uint64, bool) {
 	idStr := c.Param(name)
 	id, err := strconv.ParseUint(idStr, 10, 0)
 	return id, err == nil
+}
+
+func errGameNotFound(gameId GameID) error {
+	return fmt.Errorf("game with id %d not found", gameId)
 }
