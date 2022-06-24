@@ -51,11 +51,27 @@ func (d *Dealer) ListGameNames() []string {
 	return gamesList
 }
 
-func (d *Dealer) GetGame(id GameID) (*Poker, bool) {
+func (d *Dealer) GetGame(id GameID) (*GameResponse, bool) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	poker, ok := d.games[id]
-	return poker, ok
+	if !ok {
+		return nil, ok
+	}
+	resp := GameResponse{
+		ID:      id,
+		Name:    poker.Name,
+		Players: make([]PlayerResponse, 0, len(poker.Players)),
+	}
+	for _, player := range poker.Players {
+		resp.Players = append(resp.Players, PlayerResponse{
+			ID:   player.ID,
+			Name: player.Name,
+			Vote: poker.Votes[player.ID],
+		})
+	}
+
+	return &resp, ok
 }
 
 // TODO we obviously don't handle the case where player is deleted while they are in a game

@@ -29,7 +29,7 @@ func TestCreateAndGetAGame(t *testing.T) {
 
 	resp, err := http.Get(fmt.Sprintf(fullPath("/api/games/%d"), pokerID))
 	require.NoError(t, err)
-	var poker game.Poker
+	var poker game.GameResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&poker))
 }
 
@@ -116,18 +116,24 @@ func TestJoinGame(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		buf.Reset()
 	}
-	players := make([]game.Player, 0, 1+len(joiners))
-	players = append(players, creator)
-	players = append(players, joiners...)
+	players := make([]game.PlayerResponse, 0, 1+len(joiners))
+	players = append(players, game.PlayerResponse{
+		ID:   creator.ID,
+		Name: creator.Name,
+	})
+	for _, joinee := range joiners {
+		players = append(players, game.PlayerResponse{
+			ID:   joinee.ID,
+			Name: joinee.Name,
+		})
+	}
 
 	resp, err := http.Get(fmt.Sprintf(fullPath("/api/games/%d"), gameID))
 	require.NoError(t, err)
-	var poker game.Poker
+	var poker game.GameResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&poker))
 	require.Equal(t, len(players), len(poker.Players))
-	for _, player := range players {
-		require.Equal(t, player, poker.Players[player.ID])
-	}
+	require.ElementsMatch(t, players, poker.Players)
 }
 
 func createUser(t *testing.T) game.Player {
