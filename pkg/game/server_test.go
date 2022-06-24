@@ -71,26 +71,29 @@ func TestListGames(t *testing.T) {
 			server := game.NewStartedServer()
 			defer server.Stop(context.Background())
 
-			expectedGameNames := make([]string, 0, test.numberOfGamesPerPlayer)
+			expectedGames := make([]game.GameListEntry, 0, test.numberOfGamesPerPlayer)
 			for _, creatorID := range test.generateCreatorsIDs(t) {
 				for i := 0; i < test.numberOfGamesPerPlayer; i++ {
 					req := game.CreatePokerRequest{
 						GameName:  gen.RandLowercaseString(),
 						CreatorID: creatorID,
 					}
-					expectedGameNames = append(expectedGameNames, req.GameName)
-					createGame(t, req)
+					gameID := createGame(t, req)
+					expectedGames = append(expectedGames, game.GameListEntry{
+						ID:   gameID,
+						Name: req.GameName,
+					})
 				}
 			}
 
 			resp, err := http.Get(fullPath("/api/games"))
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, resp.StatusCode)
-			var resGameNames []string
+			var resGameNames []game.GameListEntry
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&resGameNames))
-			require.Equal(t, len(expectedGameNames), len(resGameNames))
+			require.Equal(t, len(expectedGames), len(resGameNames))
 
-			require.ElementsMatch(t, expectedGameNames, resGameNames)
+			require.ElementsMatch(t, expectedGames, resGameNames)
 		})
 	}
 }

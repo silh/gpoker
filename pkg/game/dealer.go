@@ -40,14 +40,17 @@ func (d *Dealer) CreateGame(name string, creator Player) (*Poker, error) { // TO
 	return &poker, nil
 }
 
-func (d *Dealer) ListGameNames() []string {
+func (d *Dealer) ListGameNames() []GameListEntry {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
-	gamesList := make([]string, 0, len(d.games))
+	gamesList := make([]GameListEntry, 0, len(d.games))
 	for _, v := range d.games {
-		gamesList = append(gamesList, v.Name)
+		gamesList = append(gamesList, GameListEntry{
+			ID:   v.ID,
+			Name: v.Name,
+		})
 	}
-	sort.Strings(gamesList)
+	sort.Slice(gamesList, func(i, j int) bool { return gamesList[i].Name < gamesList[j].Name })
 	return gamesList
 }
 
