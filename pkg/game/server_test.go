@@ -143,7 +143,7 @@ func createUser(t *testing.T) game.Player {
 	req := game.RegisterUserRequest{Name: gen.RandLowercaseString()}
 	var buffer bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buffer).Encode(&req))
-	resp, err := http.Post(fullPath("/signup"), "application/json", &buffer)
+	resp, err := http.Post(fullPath("/api/signup"), "application/json", &buffer)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	var player game.Player

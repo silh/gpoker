@@ -42,7 +42,7 @@ func NewServer() *Server {
 	}
 
 	app.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
-	app.POST("/signup", srv.signup)
+	app.POST("/api/signup", srv.signup)
 
 	app.POST("/api/games", srv.createGame)
 	app.GET("/api/games", srv.listGameNames)
