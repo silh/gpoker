@@ -10,7 +10,7 @@ var ErrGameNotFound = errors.New("game not found")
 var ErrPlayerNotInGame = errors.New("player not in game")
 
 type GameID uint64 // TODO same as the above
-type Vote uint64   // TODO well that should probably be an interface? Or some enum
+type Vote string   // TODO well that should probably be an interface? Or some enum
 
 // Poker tracks game info. The structure is not ideal and should be reconsidered.
 type Poker struct {
