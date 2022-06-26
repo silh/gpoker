@@ -27,7 +27,7 @@ type Dealer struct {
 	lock       sync.RWMutex // protects nextGameID and games. This can be changed in the future to work with channels
 }
 
-func (d *Dealer) CreateGame(name string, creator Player) (*Poker, error) { // TODO not sure if this should return a pointer
+func (d *Dealer) CreateGame(name string, creator Player) (GameResponse, error) { // TODO not sure if this should return a pointer
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	poker := Poker{
@@ -37,7 +37,7 @@ func (d *Dealer) CreateGame(name string, creator Player) (*Poker, error) { // TO
 	}
 	d.nextGameID++
 	d.games[poker.ID] = &poker
-	return &poker, nil
+	return gameToResponse(&poker), nil
 }
 
 func (d *Dealer) ListGameNames() []GameListEntry {
@@ -54,15 +54,19 @@ func (d *Dealer) ListGameNames() []GameListEntry {
 	return gamesList
 }
 
-func (d *Dealer) GetGame(id GameID) (*GameResponse, bool) {
+func (d *Dealer) GetGame(id GameID) (GameResponse, bool) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	poker, ok := d.games[id]
 	if !ok {
-		return nil, ok
+		return GameResponse{}, ok
 	}
+	return gameToResponse(poker), ok
+}
+
+func gameToResponse(poker *Poker) GameResponse {
 	resp := GameResponse{
-		ID:      id,
+		ID:      poker.ID,
 		Name:    poker.Name,
 		Players: make([]PlayerResponse, 0, len(poker.Players)),
 	}
@@ -73,11 +77,11 @@ func (d *Dealer) GetGame(id GameID) (*GameResponse, bool) {
 			Vote: poker.Votes[player.ID],
 		})
 	}
-
-	return &resp, ok
+	return resp
 }
 
 // TODO we obviously don't handle the case where player is deleted while they are in a game
+// Also same player can potentially be added twice (well, overwritten technically).
 func (d *Dealer) JoinGame(gameID GameID, player Player) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()

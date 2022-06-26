@@ -159,7 +159,7 @@ func createGame(t *testing.T, req game.CreatePokerRequest) game.GameID {
 	resp, err := http.Post(fullPath("/api/games"), "application/json", &buffer)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
-	var poker game.Poker
+	var poker game.GameResponse
 	err = json.NewDecoder(resp.Body).Decode(&poker) //not entirely correct...
 	require.NoError(t, err)
 	return poker.ID
