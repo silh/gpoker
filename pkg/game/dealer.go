@@ -33,6 +33,7 @@ func (d *Dealer) CreateGame(name string, creator Player) (GameResponse, error) {
 	poker := Poker{
 		ID:      d.nextGameID,
 		Players: map[PlayerID]Player{creator.ID: creator},
+		Votes:   map[PlayerID]Vote{},
 		Name:    name,
 	}
 	d.nextGameID++
