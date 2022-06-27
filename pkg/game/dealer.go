@@ -27,6 +27,7 @@ type Dealer struct {
 	lock       sync.RWMutex // protects nextGameID and games. This can be changed in the future to work with channels
 }
 
+// CreateGame starts a new game with creator as participant.
 func (d *Dealer) CreateGame(name string, creator Player) (GameResponse, error) { // TODO not sure if this should return a pointer
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -41,6 +42,7 @@ func (d *Dealer) CreateGame(name string, creator Player) (GameResponse, error) {
 	return gameToResponse(&poker), nil
 }
 
+// ListGameNames returns names and ids of all present games sorted by name.
 func (d *Dealer) ListGameNames() []GameListEntry {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
@@ -55,6 +57,7 @@ func (d *Dealer) ListGameNames() []GameListEntry {
 	return gamesList
 }
 
+// GetGame returns information about the game by its ID. Players inside a game are sorted by name.
 func (d *Dealer) GetGame(id GameID) (GameResponse, bool) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -63,22 +66,6 @@ func (d *Dealer) GetGame(id GameID) (GameResponse, bool) {
 		return GameResponse{}, ok
 	}
 	return gameToResponse(poker), ok
-}
-
-func gameToResponse(poker *Poker) GameResponse {
-	resp := GameResponse{
-		ID:      poker.ID,
-		Name:    poker.Name,
-		Players: make([]PlayerResponse, 0, len(poker.Players)),
-	}
-	for _, player := range poker.Players {
-		resp.Players = append(resp.Players, PlayerResponse{
-			ID:   player.ID,
-			Name: player.Name,
-			Vote: poker.Votes[player.ID],
-		})
-	}
-	return resp
 }
 
 // TODO we obviously don't handle the case where player is deleted while they are in a game
@@ -107,4 +94,21 @@ func (d *Dealer) Vote(gameId GameID, voteReq VoteRequest) error {
 	}
 	game.Votes[player.ID] = voteReq.Vote
 	return nil
+}
+
+func gameToResponse(poker *Poker) GameResponse {
+	resp := GameResponse{
+		ID:      poker.ID,
+		Name:    poker.Name,
+		Players: make([]PlayerResponse, 0, len(poker.Players)),
+	}
+	for _, player := range poker.Players {
+		resp.Players = append(resp.Players, PlayerResponse{
+			ID:   player.ID,
+			Name: player.Name,
+			Vote: poker.Votes[player.ID],
+		})
+	}
+	sort.Slice(resp.Players, func(i, j int) bool { return resp.Players[i].Name < resp.Players[j].Name })
+	return resp
 }

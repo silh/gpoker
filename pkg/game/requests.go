@@ -3,17 +3,17 @@ package game
 // CreatePokerRequest to start a game.
 type CreatePokerRequest struct {
 	GameName  string   `json:"gameName"`
-	CreatorID PlayerID `json:"creatorID"`
+	CreatorID PlayerID `json:"creatorId"`
 }
 
 // JoinPokerRequest to join a game.
 type JoinPokerRequest struct {
-	PlayerID PlayerID `json:"playerID"`
+	PlayerID PlayerID `json:"playerId"` // FIXME need validation on all request
 }
 
 // VoteRequest for player's vote.
 type VoteRequest struct {
-	PlayerID PlayerID `json:"playerID"`
+	PlayerID PlayerID `json:"playerId"`
 	Vote     Vote     `json:"Vote"`
 }
 
