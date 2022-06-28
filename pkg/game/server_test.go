@@ -33,6 +33,36 @@ func TestCreateAndGetAGame(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&poker))
 }
 
+func TestGetGameErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		gameID       string
+		responseCode int
+	}{
+		{
+			name:         "Game doesn't exist",
+			gameID:       "0",
+			responseCode: http.StatusNotFound,
+		},
+		{
+			name:         "Game id is not a number",
+			gameID:       "notanumber",
+			responseCode: http.StatusBadRequest,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			srv := game.NewStartedServer()
+			defer srv.Stop(context.Background())
+			waitForServer(t)
+			// use string here because we want to test that only ints are accepted
+			resp, err := http.Get(fmt.Sprintf(fullPath("/api/games/%s"), test.gameID))
+			require.NoError(t, err)
+			require.Equal(t, test.responseCode, resp.StatusCode)
+		})
+	}
+}
+
 func TestListGames(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -108,16 +138,8 @@ func TestJoinGame(t *testing.T) {
 		createUser(t),
 		createUser(t),
 	}
-	var buf bytes.Buffer
 	for _, player := range joiners {
-		body := game.JoinPokerRequest{PlayerID: player.ID}
-		require.NoError(t, json.NewEncoder(&buf).Encode(&body))
-		req, err := http.NewRequest(http.MethodPut, fmt.Sprintf(fullPath("/api/games/%d/join"), gameID), &buf)
-		require.NoError(t, err)
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		buf.Reset()
+		join(t, player, gameID)
 	}
 	players := make([]game.PlayerResponse, 0, 1+len(joiners))
 	players = append(players, game.PlayerResponse{
@@ -137,6 +159,70 @@ func TestJoinGame(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&poker))
 	require.Equal(t, len(players), len(poker.Players))
 	require.ElementsMatch(t, players, poker.Players)
+}
+
+func TestVote(t *testing.T) {
+	srv := game.NewStartedServer()
+	defer srv.Stop(context.Background())
+	waitForServer(t)
+	creator := createUser(t)
+	gameID := createDefaultGame(t, creator)
+	players := []game.Player{
+		createUser(t),
+		createUser(t),
+	}
+	for _, player := range players {
+		join(t, player, gameID)
+	}
+	expectedPlayers := make([]game.PlayerResponse, 0, 1+len(players))
+	expectedPlayers = append(expectedPlayers, game.PlayerResponse{
+		ID:   creator.ID,
+		Name: creator.Name,
+		Vote: game.Vote(gen.RandLowercaseString()),
+	})
+	for _, joining := range players {
+		expectedPlayers = append(expectedPlayers, game.PlayerResponse{
+			ID:   joining.ID,
+			Name: joining.Name,
+			Vote: game.Vote(gen.RandLowercaseString()),
+		})
+	}
+
+	// Vote
+	for _, player := range expectedPlayers {
+		vote(t, player, gameID)
+	}
+
+	resp, err := http.Get(fmt.Sprintf(fullPath("/api/games/%d"), gameID))
+	require.NoError(t, err)
+	var poker game.GameResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&poker))
+	require.Equal(t, len(expectedPlayers), len(poker.Players))
+	require.ElementsMatch(t, expectedPlayers, poker.Players)
+}
+
+func join(t *testing.T, player game.Player, gameID game.GameID) {
+	var buf bytes.Buffer
+	body := game.JoinPokerRequest{PlayerID: player.ID}
+	require.NoError(t, json.NewEncoder(&buf).Encode(&body))
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf(fullPath("/api/games/%d/join"), gameID), &buf)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func vote(t *testing.T, player game.PlayerResponse, gameID game.GameID) {
+	var buf bytes.Buffer
+	request := game.VoteRequest{
+		PlayerID: player.ID,
+		Vote:     player.Vote,
+	}
+	require.NoError(t, json.NewEncoder(&buf).Encode(&request))
+	resp, err := http.Post(fmt.Sprintf(fullPath("/api/games/%d/vote"), gameID), "application/json", &buf)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	buf.Reset()
 }
 
 func createUser(t *testing.T) game.Player {
