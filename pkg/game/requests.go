@@ -19,5 +19,5 @@ type VoteRequest struct {
 
 // RegisterUserRequest to add new user. We don't need passwords for now.
 type RegisterUserRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" binding:"required"`
 }

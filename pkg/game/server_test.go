@@ -201,6 +201,36 @@ func TestVote(t *testing.T) {
 	require.ElementsMatch(t, expectedPlayers, poker.Players)
 }
 
+func TestSignupErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		playerName   string
+		responseCode int
+	}{
+		{
+			name:         "Empty name",
+			playerName:   "",
+			responseCode: http.StatusBadRequest,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			srv := game.NewStartedServer()
+			defer srv.Stop(context.Background())
+			waitForServer(t)
+
+			resp, err := http.Post(
+				fullPath("/api/signup"),
+				"application/json",
+				bytes.NewBufferString(fmt.Sprintf(`{"name": "%s"}`, test.playerName)),
+			)
+			require.NoError(t, err)
+			require.Equal(t, test.responseCode, resp.StatusCode)
+			// TODO add responses and check them
+		})
+	}
+}
+
 func join(t *testing.T, player game.Player, gameID game.GameID) {
 	var buf bytes.Buffer
 	body := game.JoinPokerRequest{PlayerID: player.ID}
