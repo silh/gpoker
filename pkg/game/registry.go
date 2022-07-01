@@ -18,7 +18,7 @@ type PlayerRegistry struct {
 
 func NewPlayerRegistry() *PlayerRegistry {
 	return &PlayerRegistry{
-		nextPlayerID: 0,
+		nextPlayerID: 1,
 		players:      map[PlayerID]Player{},
 		lock:         sync.RWMutex{},
 	}

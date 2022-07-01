@@ -27,6 +27,15 @@ type Dealer struct {
 	lock       sync.RWMutex // protects nextGameID and games. This can be changed in the future to work with channels
 }
 
+// NewDealer creates a new instance of a Dealer with nextGameID set to 1.
+func NewDealer() *Dealer {
+	return &Dealer{
+		nextGameID: 1,
+		games:      make(map[GameID]*Poker), // TODO why do we store here a pointer, but in registry - a struct
+		lock:       sync.RWMutex{},
+	}
+}
+
 // CreateGame starts a new game with creator as participant.
 func (d *Dealer) CreateGame(name string, creator Player) (GameResponse, error) { // TODO not sure if this should return a pointer
 	d.lock.Lock()

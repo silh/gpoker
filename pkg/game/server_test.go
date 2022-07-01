@@ -21,6 +21,49 @@ func TestCreate(t *testing.T) {
 	createDefaultGame(t, createUser(t))
 }
 
+func TestCreateGameMissingFieldsError(t *testing.T) {
+	tests := []struct {
+		name string
+		body func(creatorID game.PlayerID) *bytes.Buffer
+	}{
+		{
+			name: "no game name",
+			body: func(creatorID game.PlayerID) *bytes.Buffer {
+				return bytes.NewBufferString(fmt.Sprintf(`{"creatorId":%d}`, creatorID))
+			},
+		},
+		{
+			name: "no creator ID",
+			body: func(game.PlayerID) *bytes.Buffer {
+				return bytes.NewBufferString(`{"gameName": "aaaa"}`)
+			},
+		},
+		{
+			name: "no creator ID and no game name",
+			body: func(creatorID game.PlayerID) *bytes.Buffer {
+				return bytes.NewBufferString(`{}`)
+			},
+		},
+		{
+			name: "malformed json",
+			body: func(creatorID game.PlayerID) *bytes.Buffer {
+				return bytes.NewBufferString(`{z`)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			srv := game.NewStartedServer()
+			defer srv.Stop(context.Background())
+			waitForServer(t)
+			buffer := test.body(createUser(t).ID)
+			resp, err := http.Post(fullPath("/api/games"), "application/json", buffer)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		})
+	}
+}
+
 func TestCreateAndGetAGame(t *testing.T) {
 	srv := game.NewStartedServer()
 	defer srv.Stop(context.Background())
@@ -128,6 +171,30 @@ func TestListGames(t *testing.T) {
 	}
 }
 
+func TestJoinNoPlayerID(t *testing.T) {
+	srv := game.NewStartedServer()
+	defer srv.Stop(context.Background())
+	waitForServer(t)
+	creator := createUser(t)
+	gameID := createDefaultGame(t, creator)
+	var buf bytes.Buffer
+	buf.WriteString(`{}`)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf(fullPath("/api/games/%d/join"), gameID), &buf)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestJoinNotRegistered(t *testing.T) {
+	srv := game.NewStartedServer()
+	defer srv.Stop(context.Background())
+	waitForServer(t)
+	creator := createUser(t)
+	gameID := createDefaultGame(t, creator)
+	joinExpect(t, 100, gameID, http.StatusBadRequest)
+}
+
 func TestJoinGame(t *testing.T) {
 	srv := game.NewStartedServer()
 	defer srv.Stop(context.Background())
@@ -139,7 +206,7 @@ func TestJoinGame(t *testing.T) {
 		createUser(t),
 	}
 	for _, player := range joiners {
-		join(t, player, gameID)
+		join(t, player.ID, gameID)
 	}
 	players := make([]game.PlayerResponse, 0, 1+len(joiners))
 	players = append(players, game.PlayerResponse{
@@ -172,7 +239,7 @@ func TestVote(t *testing.T) {
 		createUser(t),
 	}
 	for _, player := range players {
-		join(t, player, gameID)
+		join(t, player.ID, gameID)
 	}
 	expectedPlayers := make([]game.PlayerResponse, 0, 1+len(players))
 	expectedPlayers = append(expectedPlayers, game.PlayerResponse{
@@ -231,15 +298,19 @@ func TestSignupErrors(t *testing.T) {
 	}
 }
 
-func join(t *testing.T, player game.Player, gameID game.GameID) {
+func join(t *testing.T, playedID game.PlayerID, gameID game.GameID) {
+	joinExpect(t, playedID, gameID, http.StatusOK)
+}
+
+func joinExpect(t *testing.T, playedID game.PlayerID, gameID game.GameID, expectedResponseCode int) {
 	var buf bytes.Buffer
-	body := game.JoinPokerRequest{PlayerID: player.ID}
+	body := game.JoinPokerRequest{PlayerID: playedID}
 	require.NoError(t, json.NewEncoder(&buf).Encode(&body))
 	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf(fullPath("/api/games/%d/join"), gameID), &buf)
 	require.NoError(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, expectedResponseCode, resp.StatusCode)
 }
 
 func vote(t *testing.T, player game.PlayerResponse, gameID game.GameID) {

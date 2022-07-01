@@ -27,17 +27,14 @@ type Server struct {
 func NewServer() *Server {
 	app := gin.Default()
 	app.Use(cors.Default()) // CORS enabler for dev
-	dealer := Dealer{
-		nextGameID: 0,
-		games:      make(map[GameID]*Poker),
-	}
+	dealer := NewDealer()
 	registry := NewPlayerRegistry()
 	srv := &Server{
 		srv: &http.Server{
 			Addr:    ":8080", // FIXME don't hardcode that
 			Handler: app,
 		},
-		dealer:         &dealer,
+		dealer:         dealer,
 		playerRegistry: registry,
 	}
 
