@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 var ErrBadGameID = errors.New("game ID is not provided or is incorrect")
@@ -46,6 +48,8 @@ func NewServer() *Server {
 	app.GET("/api/games/:gameId", srv.getGame)
 	app.PUT("/api/games/:gameId/join", srv.joinGame)
 	app.POST("/api/games/:gameId/vote", srv.vote) // should it rather be put? patch?
+
+	app.GET("/ws/games/:gameId", srv.serveWS)
 	return srv
 }
 
@@ -169,6 +173,35 @@ func (s *Server) vote(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusBadRequest, fmt.Errorf("player %d not in game %d", voteReq.PlayerID, gameId))
 	default:
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
+	}
+}
+
+func (s *Server) serveWS(c *gin.Context) {
+	// TODO add context for those logs
+	// TODO this should subscribe to game events, which we don't even have yet :D
+	upgrader := websocket.Upgrader{
+		HandshakeTimeout: 5 * time.Second,
+		ReadBufferSize:   1024,
+		WriteBufferSize:  1024,
+		Subprotocols:     nil,
+		CheckOrigin:      func(r *http.Request) bool { return true }, // TODO this should be fixed later.
+	}
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Printf("Failed to upgrade ws connection: %s", err)
+		return
+	}
+	log.Printf("Upgraded connection!!!")
+	defer conn.Close()
+	for {
+		mesType, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Printf("New Message of type %d: %s", mesType, string(message))
+			break
+		}
+		if err = conn.WriteMessage(websocket.TextMessage, []byte("hello")); err != nil {
+			log.Printf("Error while writing to ws: %s", err)
+		}
 	}
 }
 

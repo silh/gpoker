@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 	"gpoker/gen"
 	"gpoker/pkg/game"
@@ -296,6 +297,20 @@ func TestSignupErrors(t *testing.T) {
 			// TODO add responses and check them
 		})
 	}
+}
+
+func TestWebsocketNotifications(t *testing.T) {
+	srv := game.NewStartedServer()
+	defer srv.Stop(context.Background())
+	waitForServer(t)
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:8080/ws/games/1", http.Header{})
+	require.NoError(t, err)
+	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("hi")))
+	mType, message, err := conn.ReadMessage()
+	require.NoError(t, err)
+	require.Equal(t, websocket.TextMessage, mType)
+	require.Equal(t, "hello", string(message))
 }
 
 func join(t *testing.T, playedID game.PlayerID, gameID game.GameID) {
