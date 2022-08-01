@@ -44,7 +44,7 @@ func NewServer() *Server {
 	app.POST("/api/signup", srv.signup)
 
 	app.POST("/api/games", srv.createGame)
-	app.GET("/api/games", srv.listGameNames)
+	app.GET("/api/games", srv.listGames)
 	app.GET("/api/games/:gameId", srv.getGame)
 	app.PUT("/api/games/:gameId/join", srv.joinGame)
 	app.POST("/api/games/:gameId/vote", srv.vote) // should it rather be put? patch?
@@ -103,10 +103,9 @@ func (s *Server) createGame(c *gin.Context) {
 	c.JSON(http.StatusCreated, &game)
 }
 
-// TODO probably we should return names and ids so that the user can decide to join one.
-func (s *Server) listGameNames(c *gin.Context) {
-	names := s.dealer.ListGameNames()
-	c.JSON(http.StatusOK, &names)
+func (s *Server) listGames(c *gin.Context) {
+	games := s.dealer.ListGameNames()
+	c.JSON(http.StatusOK, &games)
 }
 
 func (s *Server) getGame(c *gin.Context) {

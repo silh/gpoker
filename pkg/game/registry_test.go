@@ -35,3 +35,25 @@ func TestGetNonexistentPlayer(t *testing.T) {
 	require.False(t, ok)
 	require.Zero(t, getPlayer)
 }
+
+func TestNewPlayerRegistryFromFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		filepath string
+	}{
+		{
+			name:     "1 player",
+			filepath: "./testdata/one_player.json",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// TODO more and better tests
+			registry, err := game.NewPlayerRegistryFromFile(test.filepath)
+			require.NoError(t, err)
+			player, ok := registry.Get(1)
+			require.True(t, ok)
+			require.Equal(t, player.Name, "John")
+		})
+	}
+}
